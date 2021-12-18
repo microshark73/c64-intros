@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"kickassembler.startup": "src\\main.asm",
+		"kickassembler.assemblerLibraryPaths": ["lib"],
+		"kickassembler.editor.showDiagnostics": false,
+		"kickassembler.outputDirectory": "out"
+	}
+}
