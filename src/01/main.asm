@@ -1,11 +1,14 @@
 #import "constants.asm"
 #import "macros.asm"
 #import "pseudocommands.asm"
+#import "sinetab.asm"
+
 
 .var music = LoadSid("assets\UJ4.sid")
 .var logoSprites = LoadBinary("assets\sprites.isp")
-
 .var rasterpos = $37
+
+.var sineData = SineTab(256, 0, 13 * 8 - 1)
 
 BasicUpstart2(main)
 
@@ -17,6 +20,10 @@ jsr IOINIT
 main:
     lda #$01
     jsr $e544
+
+    lda #$00
+    sta BORDER_COLOR
+    sta BACKGROUND_COLOR
 
     lda #$1b
     sta VIC_MEM_POINTERS
@@ -168,6 +175,19 @@ irqy:
 
     dec BORDER_COLOR
     jsr music.play
+
+    dec BORDER_COLOR
+
+    ldx sinepos: #$00
+    lda sineTab, x
+    lsr
+    lsr
+    lsr
+    sta drawpos
+    jsr drawLogo
+    inc sinepos
+
+    inc BORDER_COLOR
     inc BORDER_COLOR
 
     :nextIrq(irqx, $37)
@@ -295,15 +315,26 @@ resetLogoSprites:
     sta SPRITE_6_Y
     sta SPRITE_7_Y
 
-    lda #%11010000
+    // lda #%11010000
+    // sta SPRITE_MSB_X
+    // lda #$e0
+    // sta SPRITE_4_X
+    // lda #$00
+    // sta SPRITE_5_X
+    // lda #$58
+    // sta SPRITE_6_X
+    // lda #$70
+    // sta SPRITE_7_X
+
+    lda #%11000000
     sta SPRITE_MSB_X
-    lda #$e0
+    lda #24
     sta SPRITE_4_X
-    lda #$00
+    lda #24 + 24
     sta SPRITE_5_X
-    lda #$58
+    lda #40
     sta SPRITE_6_X
-    lda #$70
+    lda #40 + 24
     sta SPRITE_7_X
 
     clc
@@ -323,29 +354,54 @@ resetLogoSprites:
     sta SPRITE_7_COLOR
     rts
 
+drawLogo:
+    ldy drawpos: #$00
+    ldx #0
+!loop:
+    .for(var i = 0; i < 7; i++) {
+        lda logoScreen + i * 40, y
+        sta $0428 + i * 40, x
+    }
+    iny
+    inx
+    cpx #40
+    bne !loop-
+    rts
+
 * = music.location "Music"
 
 .fill music.size, music.getData(i)
 
-* = $2000
+* = $2000 "Sprite data"
 spriteData:
-.fill logoSprites.getSize(), (logoSprites.get(i) ^ 255)
+.fill logoSprites.getSize(), logoSprites.get(i)
 
 .align $0800
+.segment Default "Logo font"
 logoFont:
 .import binary "assets/logo - Chars.bin"
 
 .align $0800
+.segment Default "1x2 font"
 .import binary "assets/peetmuzaxfont_1x2.bin"
 
-//* = $3000 "scrolltext"
 .align $100
+sineTab:
+.segment Default "sinetab"
+.fill 256, sineData.get(i)
+
+
+.segment Default "Scrolltext" 
+//* = $3000 "scrolltext"
+//.align $100
 scrolltext:
 
 .encoding "screencode_mixed"
 .text "Hello hallo Elektor Kalandorok!   " 
 .byte $ff
 
-.align $400
+.align $0100
 logoScreen:
-.import binary "assets\\logo - Map.bin"
+.segment Default "Logo screen data" 
+.fill 6, 0
+.import binary "assets\\logo - Map.bin", 0, 7 * 40 - 6 // -6 columns, because the logo is shifted right and we dont need the extra values
