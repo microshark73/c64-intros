@@ -1,1 +1,0 @@
-java -jar c:\own\c64\development\assemblers\KickAssembler-5.23\KickAss.jar src\main.asm -libdir src\lib -odir ..\out

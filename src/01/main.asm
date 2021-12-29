@@ -2,7 +2,8 @@
 #import "macros.asm"
 #import "pseudocommands.asm"
 
-.var music = LoadSid("assets\Phobos.sid")
+.var music = LoadSid("assets\UJ4.sid")
+.var logoSprites = LoadBinary("assets\sprites.isp")
 
 .var rasterpos = $37
 
@@ -10,7 +11,30 @@ BasicUpstart2(main)
 
 * = $0810 "main"
 
+
+jsr IOINIT
+
 main:
+    lda #$01
+    jsr $e544
+
+    lda #$1b
+    sta VIC_MEM_POINTERS
+
+    ldx #$00
+!loop:
+.for(var i = 0; i < 7; i++) {
+    lda logoScreen + i * 40, x
+    sta $0428 + i * 40, x
+}
+    inx
+    cpx #40
+    bne !loop-
+
+    lda #$00
+    tax
+    tay
+    jsr music.init
     sei
     // lda #<irq1
     // sta IRQ_SERVICE_ADDRESS_LO
@@ -30,11 +54,6 @@ main:
     sta VIC_RASTER_COUNTER
     lda #$1b
     sta VIC_CONTROL_REG_1
-    lda #$00
-    tax
-    tay
-    jsr music.init
-
     jsr resetLogoSprites
 
     cli
@@ -115,12 +134,12 @@ irqx:
     jsr normalLine
     jsr moveSpritesDownAndBadline
 
+    jsr normalLine
+    jsr normalLine
+    jsr normalLine
+    jsr normalLine
+    jsr normalLine
     jsr moveSpritePointers
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
     jsr normalAndBadline
 
     jsr normalLine
@@ -287,10 +306,14 @@ resetLogoSprites:
     lda #$70
     sta SPRITE_7_X
 
+    clc
     lda #(spriteData / 64)
     sta $07fc
+    adc #3
     sta $07fd
+    adc #3
     sta $07fe
+    adc #3
     sta $07ff
 
     lda #$01
@@ -300,21 +323,29 @@ resetLogoSprites:
     sta SPRITE_7_COLOR
     rts
 
-
 * = music.location "Music"
 
 .fill music.size, music.getData(i)
 
-* = $2000 "font"
-
-.import binary "assets\peetmuzaxfont_1x2.bin"
-
+* = $2000
 spriteData:
-    .fill 64, %10000001
+.fill logoSprites.getSize(), (logoSprites.get(i) ^ 255)
 
-* = $3000
+.align $0800
+logoFont:
+.import binary "assets/logo - Chars.bin"
+
+.align $0800
+.import binary "assets/peetmuzaxfont_1x2.bin"
+
+//* = $3000 "scrolltext"
+.align $100
 scrolltext:
 
 .encoding "screencode_mixed"
 .text "Hello hallo Elektor Kalandorok!   " 
 .byte $ff
+
+.align $400
+logoScreen:
+.import binary "assets\\logo - Map.bin"

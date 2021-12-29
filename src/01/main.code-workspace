@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "..\\lib"
+		}
+	],
+	"settings": {
+		"kickassembler.startup": "main.asm",
+		"kickassembler.assemblerLibraryPaths": ["..\\lib"],
+		"kickassembler.assembler.option.outputDirectory": "out",
+		"kickassembler.editor.showDiagnostics": false,
+		"kickassembler.editor.switchProblemsTabOnError": true,
+		"kickassembler.emulator.options": "-autostartprgmode 2 -autostart out\\main.prg -moncommands out\\main.vs"
+	}
+}
