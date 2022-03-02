@@ -1,407 +1,502 @@
-#import "constants.asm"
-#import "macros.asm"
-#import "pseudocommands.asm"
-#import "sinetab.asm"
+//#define DEBUG
 
+#import "lib/constants.asm"
+#import "lib/irq.asm"
+#import "lib/macros.asm"
+#import "lib/pseudocommands.asm"
+#import "lib/sinetabgenerator.asm"
 
-.var music = LoadSid("assets\UJ4.sid")
-.var logoSprites = LoadBinary("assets\sprites.isp")
-.var rasterpos = $37
+#import "utils.asm"
 
-.var sineData = SineTab(256, 0, 13 * 8 - 1)
+// Character line positions
+.const TOP_LOGO_LINE = 0
+.const SCROLLER_TOP_LINE = 10
+.const TOP_LOGO_STABILIZATION_LINE = SCROLLER_TOP_LINE - 1
+.const BOTTOM_LOGO_LINE = 16
 
-BasicUpstart2(main)
+// Raster positions
+.const VSP1_LINE = CharLineToVSPLine(TOP_LOGO_LINE) // Top logo
+.const VSP2_LINE = CharLineToVSPLine(TOP_LOGO_STABILIZATION_LINE) // Top logo VSP "stabilization"
+.const VSP3_LINE = CharLineToVSPLine(BOTTOM_LOGO_LINE) // Bottom logo
 
-* = $0810 "main"
+.var sineData = GenerateSine(256, 0, 6 * 2 * 8 - 1) // Moving 2 - 2 sprites (6 - 6 chars)
+.var music = LoadSid("assets/Harmonic_River.sid")
 
+:BasicUpstart2(main)
 
-jsr IOINIT
+.segment Default "Main"
 
-main:
-    lda #$01
-    jsr $e544
+main: 
+	bit $d012
+	bne main
+	bit $d011
+	bmi main
 
-    lda #$00
-    sta BORDER_COLOR
-    sta BACKGROUND_COLOR
+	jsr initScreen
+	jsr calculateLogoPositions
 
-    lda #$1b
-    sta VIC_MEM_POINTERS
+	lda #$00
+	tax
+	tay
+	jsr music.init
+	sei
+	lda #$35
+	sta $01
+	lda #$7f
+	sta CIA1.CONTROL_STATUS // Disable CIA1 interrupts
+	sta CIA2.CONTROL_STATUS // Disable CIA2 interrupts
+	lda CIA1.CONTROL_STATUS // Clear CIA1
+	lda CIA2.CONTROL_STATUS // Clear CIA2
+	lda #$01
+	sta VIC.INTERRUPT_CONTROL // Enable raster interrupts
+	sta VIC.INTERRUPT_STATUS
+	:AckAndSetNextIRQ(VSP1_LINE, irq1)
+	cli
+	jmp *
 
-    ldx #$00
-!loop:
-.for(var i = 0; i < 7; i++) {
-    lda logoScreen + i * 40, x
-    sta $0428 + i * 40, x
-}
-    inx
-    cpx #40
-    bne !loop-
-
-    lda #$00
-    tax
-    tay
-    jsr music.init
-    sei
-    // lda #<irq1
-    // sta IRQ_SERVICE_ADDRESS_LO
-    // lda #>irq1
-    // sta IRQ_SERVICE_ADDRESS_HI
-    lda #<irqx
-    sta IRQ_SERVICE_ADDRESS_LO
-    lda #>irqx
-    sta IRQ_SERVICE_ADDRESS_HI
-    lda #$7f
-    sta CIA1_CONTROL_STATUS // Disable CIA1 interrupts
-    sta CIA2_CONTROL_STATUS // Disable CIA2 interrupts
-    lda #$01
-    sta VIC_INTERRUPT_CONTROL // Enable raster interrupts
-    //lda #$37
-    lda #rasterpos
-    sta VIC_RASTER_COUNTER
-    lda #$1b
-    sta VIC_CONTROL_REG_1
-    jsr resetLogoSprites
-
-    cli
-    //rts
-    jmp *
-
-irqx:
-    // + 7 (Store PC in stack)
-
-    asl VIC_INTERRUPT_STATUS // 6
-    ldx #$0d // 2
-!loop:
-    dex  // 2
-    bne !loop- // 2*
-    lda VIC_RASTER_COUNTER // 4
-    //cmp #$38
-    cmp #rasterpos + 1 // 2
-    beq !skip+ // 2*
-!skip:
-    ldx #$08 // 2
-!loop:
-    dex // 2 * 8
-    bne !loop- // 2* * 8
-    nop // 2
-
-    lda VIC_RASTER_COUNTER // 4
-    //cmp #$39
-    cmp #rasterpos + 2 // 2
-    beq !skip+ // 2*
-!skip:
-    ldx #$05 // 2
-!loop:
-    dex // 2 * 5
-    bne !loop- // 2* * 5
-
-    lda #$00 // 2
-    ldx #$08 // 2
-    ldy #$00 // 2
-    bit $ea // 3
-    nop // 2
-    sta VIC_CONTROL_REG_2 // 4
-    stx VIC_CONTROL_REG_2 // 4
-    sta VIC_CONTROL_REG_2, y // 4
-    stx VIC_CONTROL_REG_2 // 4
-    nop
-    nop
-    nop
-
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalAndBadline
-
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr moveSpritesDownAndBadline
-
-    jsr moveSpritePointers
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalAndBadline
-
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr moveSpritesDownAndBadline
-
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr moveSpritePointers
-    jsr normalAndBadline
-
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalAndBadline
-
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    jsr normalLine
-    // jsr normalAndBadline
-    jsr normalLine
-
-    :nextIrq(irqy, $c0)
-
-irqy:
-    asl VIC_INTERRUPT_STATUS
-
-    jsr resetLogoSprites
-
-    dec BORDER_COLOR
-    jsr music.play
-
-    dec BORDER_COLOR
-
-    ldx sinepos: #$00
-    lda sineTab, x
-    lsr
-    lsr
-    lsr
-    sta drawpos
-    jsr drawLogo
-    inc sinepos
-
-    inc BORDER_COLOR
-    inc BORDER_COLOR
-
-    :nextIrq(irqx, $37)
+//.align $100
 
 irq1:
-    asl VIC_INTERRUPT_STATUS
+	:pusha
+	:StabilizeIrq()
+upperLogoVSP: 
+	:VSP()
 
-    lda spos: #$07 
-    sta VIC_CONTROL_REG_2 
+	jsr upperSprites.render
 
-    lda #$18
-    sta $d018 
-    lda #$60
-    sta $d012
-    lda #<irq2
-    sta IRQ_SERVICE_ADDRESS_LO
-    lda #>irq2
-    sta IRQ_SERVICE_ADDRESS_HI
-    jmp DEFAULT_IRQ_HANDLER_WITH_CURSOR
+	ldx #58
+!:	dex
+	bne !-
+	nop
 
+	lda #$1b
+	sta VIC.VERTICAL_CONTROL
 
-irq2:
-    asl VIC_INTERRUPT_STATUS
+	ldx upperLogoVSP.CharOffsetLo
+	lda #$07
+	ldy #$00
 
-    lda #$c8
-    sta VIC_CONTROL_REG_2
-    lda #$15
-    sta VIC_MEM_POINTERS
+	jsr openLogoBorder
 
+	:AckAndSetNextIRQ(VSP2_LINE, irq2)
+	:popa
+	rti
 
-    inc BORDER_COLOR
-    jsr music.play
-    inc BORDER_COLOR
-
-    jsr scroller
-
-    dec BORDER_COLOR
-    dec BORDER_COLOR
-
-    :nextIrq(irq1, $30)
-
-    jmp DEFAULT_IRQ_HANDLER_WITHOUT_CURSOR
-
-scroller:
-    lda spos
-    sec
-    sbc scrollspeed: #$01
-    bcc !skip+
-    sta spos
-    rts
-!skip:
-    adc #$08
-    sta spos
-
-    jsr moveScrollerLeft
-
-writeNextChar:
-    lda tpos: scrolltext
-    cmp #$ff
-    bne !skip+
-    mov16 scrolltext : tpos
-    jmp writeNextChar
-!skip:
-    sta $0427
-    clc
-    adc #$80
-    sta $044f
-    inc16 tpos
-    rts
-
-normalLine:
-    @wait #32
-    sta VIC_CONTROL_REG_2 // 4
-    stx VIC_CONTROL_REG_2 // 4
-    rts
-
-normalAndBadline:
-    @wait #32
-    sta VIC_CONTROL_REG_2 // 4
-    stx VIC_CONTROL_REG_2 // 4
-    sta VIC_CONTROL_REG_2, y // 5
-    stx VIC_CONTROL_REG_2 // 4
-    rts // 6
-
-moveSpritesDownAndBadline:
-    lda SPRITE_4_Y // 4
-    clc // 2
-    adc #21 // 2
-    sta SPRITE_4_Y // 4
-    sta SPRITE_5_Y // 4
-    sta SPRITE_6_Y // 4
-    sta SPRITE_7_Y // 4
-    lda #0 // 2
-
-    @wait #6
-
-    sta VIC_CONTROL_REG_2 // 4
-    stx VIC_CONTROL_REG_2 // 4
-    sta VIC_CONTROL_REG_2, y // 5
-    stx VIC_CONTROL_REG_2 // 4
-    rts
-
-moveSpritePointers:
-    inc $07fc // 6
-    inc $07fd // 6
-    inc $07fe // 6
-    inc $07ff // 6
-    @wait #8
-    sta VIC_CONTROL_REG_2 // 4
-    stx VIC_CONTROL_REG_2 // 4
-    rts
-
-
-moveScrollerLeft:
-    :MoveScreenLeftUnrolled($0400, 2)
-    rts
-
-resetLogoSprites:
-    lda #$f0
-    sta SPRITE_ENABLE
-
-    lda #rasterpos
-    sta SPRITE_4_Y
-    sta SPRITE_5_Y
-    sta SPRITE_6_Y
-    sta SPRITE_7_Y
-
-    // lda #%11010000
-    // sta SPRITE_MSB_X
-    // lda #$e0
-    // sta SPRITE_4_X
-    // lda #$00
-    // sta SPRITE_5_X
-    // lda #$58
-    // sta SPRITE_6_X
-    // lda #$70
-    // sta SPRITE_7_X
-
-    lda #%11000000
-    sta SPRITE_MSB_X
-    lda #24
-    sta SPRITE_4_X
-    lda #24 + 24
-    sta SPRITE_5_X
-    lda #40
-    sta SPRITE_6_X
-    lda #40 + 24
-    sta SPRITE_7_X
-
-    clc
-    lda #(spriteData / 64)
-    sta $07fc
-    adc #3
-    sta $07fd
-    adc #3
-    sta $07fe
-    adc #3
-    sta $07ff
-
-    lda #$01
-    sta SPRITE_4_COLOR
-    sta SPRITE_5_COLOR
-    sta SPRITE_6_COLOR
-    sta SPRITE_7_COLOR
-    rts
-
-drawLogo:
-    ldy drawpos: #$00
-    ldx #0
-!loop:
-    .for(var i = 0; i < 7; i++) {
-        lda logoScreen + i * 40, y
-        sta $0428 + i * 40, x
-    }
-    iny
-    inx
-    cpx #40
-    bne !loop-
-    rts
-
-* = music.location "Music"
-
-.fill music.size, music.getData(i)
-
-* = $2000 "Sprite data"
-spriteData:
-.fill logoSprites.getSize(), logoSprites.get(i)
-
-.align $0800
-.segment Default "Logo font"
-logoFont:
-.import binary "assets/logo - Chars.bin"
-
-.align $0800
-.segment Default "1x2 font"
-.import binary "assets/peetmuzaxfont_1x2.bin"
-
-.align $100
-sineTab:
-.segment Default "sinetab"
-.fill 256, sineData.get(i)
-
-
-.segment Default "Scrolltext" 
-//* = $3000 "scrolltext"
 //.align $100
-scrolltext:
+irq2:
+	:pusha
+	:StabilizeIrq()
 
-.encoding "screencode_mixed"
-.text "Hello hallo Elektor Kalandorok!   " 
-.byte $ff
+stabilizationVSP:
+	:VSP()
 
-.align $0100
-logoScreen:
-.segment Default "Logo screen data" 
-.fill 6, 0
-.import binary "assets\\logo - Map.bin", 0, 7 * 40 - 6 // -6 columns, because the logo is shifted right and we dont need the extra values
+	jsr scrollSprites.render
+
+	ldx #76
+!:	dex
+	bne !-
+	bit $ea
+
+	lda #$1b
+	sta VIC.VERTICAL_CONTROL
+
+	ldx #40
+!:	dex 
+	bne !-
+
+	ldx stabilizationVSP.CharOffsetLo // Scroller horizontal offset stored there...
+	lda #$07
+	ldy #$00
+
+	jsr openScrollerBorder
+
+	:AckAndSetNextIRQ(VSP3_LINE, irq3)
+	:popa
+	rti
+
+//.align $100
+irq3:
+	:pusha
+	:StabilizeIrq()
+lowerLogoVSP:
+	:VSP()
+
+	jsr lowerSprites.render
+
+	ldx #58
+!:	dex
+	bne !-
+	nop
+
+	lda #$1b
+	sta VIC.VERTICAL_CONTROL
+
+	ldx lowerLogoVSP.CharOffsetLo
+	lda #$07
+	ldy #$00
+
+	jsr openLogoBorder
+
+	jsr music.play
+	jsr calculateLogoPositions
+	jsr scroller.update
+
+	:AckAndSetNextIRQ(VSP1_LINE, irq1)
+	:popa
+	rti
+
+upperSprites:
+	:LogoSprites(VSP1_LINE + 7)
+lowerSprites:
+	:LogoSprites(VSP3_LINE + 7)
+scrollSprites:
+	:ScrollSprites(SCROLLER_TOP_LINE)
+
+calculateLogoPositions:
+	// Calculate upper logo position
+	inc upperLogoSinePos
+	ldx upperLogoSinePos: #0
+	lda sineTabHi, x
+	sta upperLogoVSP.CharOffsetHi
+	lda sineTabLo, x
+	eor #$07
+	ora #$08
+	sta upperLogoVSP.CharOffsetLo
+
+	jsr upperSprites.calculate
+
+	// Stabilization after upper logo VSP
+	lda #40
+	sec
+	sbc sineTabHi, x
+	sta stabilizationVSP.CharOffsetHi
+	// lda #$c8
+	// sta stabilizationVSP.CharOffsetLo
+
+	// Calculate lower logo position
+	inc lowerLogoSinePos
+	ldx lowerLogoSinePos: #$40
+	lda sineTabHi, x
+	sta lowerLogoVSP.CharOffsetHi
+	lda sineTabLo, x
+	eor #$07
+	ora #$08
+	sta lowerLogoVSP.CharOffsetLo
+
+	jsr lowerSprites.calculate
+	rts
+
+	.import source "openborders.asm"
+
+	* = music.location "Music"
+	.fill music.size, music.getData(i)
+
+	* = $2000 "Sprites, fonts, screen and tables"
+
+logoFont:
+	.import binary "assets/logo - Chars.bin"
+	.align $400
+screen: {
+	// Logo is shifted to the right and clipped 6 characters from both sides (sprites will cover the clipped part)
+	.var logoMap = LoadBinary("assets/logo - Map.bin")
+	// Upper logo
+	.fill 5, 0
+	.fill 7 * 40 - 5, logoMap.get(i)
+	.fill 3 * 40, 0
+	// Scroller
+	.fill 3 * 40, 0
+	// Lower logo
+	.fill 2 * 40 + 5, 0
+	.fill 7 * 40 - 5, logoMap.get(i)
+}
+	.align $0800
+scrollFont:
+	//.import binary "assets\gp intro 07 2x3 - Chars.bin"
+	.import binary "assets\gp intro 07 2x3 extended - Chars.bin"
+
+scrollFontMap: {
+	.var map = LoadBinary("assets\gp intro 07 2x3 extended - Map.bin")
+	// 32 chars in a rows 2x3 format (1 row is 64 bytes)
+	row1: 
+	.fill 64, map.get(i)
+	.fill 64, map.get(3 * 64 + i)
+	row2:
+	.fill 64, map.get(64 + i)
+	.fill 64, map.get(64 + 3 * 64 + i)
+	row3:
+	.fill 64, map.get(128 + i)
+	.fill 64, map.get(128 + 3 * 64 + i)
+	//.import binary "assets\gp intro 07 2x3 extended - Map.bin"
+}
+
+	.align $40
+logoSpriteData:
+	.import binary "assets\logo - Sprites.isp"
+
+	.align $40
+scrollSpriteData:
+	.fill 64 * 8, 0 
+
+//.align $100
+sineTabHi:
+	.fill sineData.size(), sineData.get(i) / 8
+sineTabLo:
+	.fill sineData.size(), mod(sineData.get(i), 8)
+sineTabAbs:
+	.fill sineData.size(), 12 * 8 - 1 - sineData.get(i)
+
+blinkTable:
+	//.byte $09, $02, $08, $0a, $0f, $0d, $07, $01
+	.byte $01, $0d, $0f, $0a, $08, $02, $09, $00, $09, $02, $08, $0a, $0f, $0d, $01
+
+.segment Default "Methods"
+
+openScrollerBorder: {
+	jsr normalAndBadline
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr moveSpritesDown
+	jsr moveSpritePointersAndBadline
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalAndBadline
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	rts
+}
+
+openLogoBorder: {
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalAndBadline
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr moveSpritesDown
+	jsr normalAndBadline
+	jsr moveSpritePointers
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalAndBadline
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr moveSpritesDown
+	jsr normalAndBadline
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr moveSpritePointers
+	jsr normalAndBadline
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalAndBadline
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	jsr normalLine
+	//jsr normalLine
+	rts
+}
+
+scroller: {
+update:
+	lda scrollerOffset: #$07
+	sec
+	sbc scrollSpeed: #$01
+	bcc !+
+	sta scrollerOffset
+
+	jsr scrollSprites.calculate
+	rts
+!:
+	clc
+	adc #$08
+	sta scrollerOffset
+
+	jsr scrollSprites.calculate
+
+	jsr moveLeft
+
+	// Write next character data to right side of shadow screen
+	jsr getNextChar
+	asl
+	ldx charColumn: #$02
+	dex
+	bne !+
+	:inc16 scrollPos
+	ldx #$02 // Font width
+	tay
+	iny
+	tya
+!:
+	stx charColumn
+	tay
+	lda scrollFontMap.row1, y
+	sta shadowScreen + 0 * 6 + 5
+	lda scrollFontMap.row2, y
+	sta shadowScreen + 1 * 6 + 5
+	lda scrollFontMap.row3, y
+	sta shadowScreen + 2 * 6 + 5
+
+	jsr shiftRightSprites
+	jsr calculateRightSpriteData
+	rts
+
+getNextChar: 
+	// Returns the next scroller character in A. Control characters are always skipped
+	lda scrollPos: scrollText
+	cmp #$ff
+	beq reset
+	bmi setSpeed
+	rts
+setSpeed:
+	and #$07
+	sta scrollSpeed
+	:inc16 scrollPos
+	jmp getNextChar
+reset:
+	:mov16 #scrollText : scrollPos
+	lda #$02
+	sta charColumn
+	jmp getNextChar
+
+moveLeft:	
+	jsr shiftLeftSprites
+	jsr calculateLeftSpriteData
+
+	// Move scroller screen left
+	:MoveScreenLeft(screen + 10 * 40, 3) 
+
+	// Write shadow screen data to right side of scroller
+	lda shadowScreen + 0 * 6
+	sta screen + 10 * 40 + 39
+	lda shadowScreen + 1 * 6
+	sta screen + 11 * 40 + 39
+	lda shadowScreen + 2 * 6
+	sta screen + 12 * 40 + 39
+	// Move shadow screen left
+	ldx #0
+!:
+	.for(var i = 0; i < 3; i++) {
+		lda shadowScreen + i * 6 + 1, x
+		sta shadowScreen + i * 6, x
+	}
+	inx
+	cpx #6
+	bne !-
+	rts
+}
+
+calculateCharDataPointer:
+	sta $fb
+	lda #$00
+	sta $fc
+	clc
+	asl $fb
+	rol $fc
+	asl $fb
+	rol $fc
+	asl $fb
+	rol $fc
+	lda $fc
+	clc
+	adc #>scrollFont
+	sta $fc
+	rts
+
+initScreen:
+	lda #$00
+	sta VIC.BORDER_COLOR
+	sta VIC.BACKGROUND_COLOR
+
+	lda #%1111_0000
+	sta VIC.SPRITE_ENABLE
+
+	lda #$0f
+	sta upperSprites.color
+	sta lowerSprites.color
+	sta scrollSprites.color
+	ldx #39
+!:
+	.for(var i = 0; i < 25; i++) {
+		sta $d800 + i * 40, x
+	}
+	dex
+	bpl !-
+	rts
+
+shadowScreen:
+	// Screen data of right-border (sprite) part of the scroller
+	// 3 rows x 6 char columns
+	.fill 3 * 6, 0
+
+calculateLeftSpriteData:
+	// Create sprite data from left side of scroller screen:
+	:RenderCharDataToSprite(screen + 10 * 40, scrollSpriteData + 2 * 64 + 2 + (21 - 8) * 3)
+	:RenderCharDataToSprite(screen + 11 * 40, scrollSpriteData + 3 * 64 + 2)
+	:RenderCharDataToSprite(screen + 12 * 40, scrollSpriteData + 3 * 64 + 2 + 8 * 3)
+	rts
+
+calculateRightSpriteData:
+	// Create sprite data from right side of shadow scroller
+	:RenderCharDataToSprite(shadowScreen + 0 * 6 + 5, scrollSpriteData + 6 * 64 + 2 + (21 - 8) * 3)
+	:RenderCharDataToSprite(shadowScreen + 1 * 6 + 5, scrollSpriteData + 7 * 64 + 2)
+	:RenderCharDataToSprite(shadowScreen + 2 * 6 + 5, scrollSpriteData + 7 * 64 + 2 + 8 * 3)
+	rts
+
+shiftLeftSprites:
+	:MoveSpriteColumnsLeft(scrollSpriteData)
+	rts
+
+shiftRightSprites:
+	:MoveSpriteColumnsLeft(scrollSpriteData + 4 * 64)
+	rts
+
+	.segment Default "Scrolltext"
+scrollText:
+	//.encoding "screencode_upper"
+	.byte $85
+	.text "hello hallo elektor kalandorok             "
+	.byte $81
+	.text @"@abcdefghijklmnopqrstuvwxyz["; .byte 28, 29, 30, 31; .text @"!\"#$%&'()*+,-./0123456789:;<=>?"
+	.byte $83
+	.text "                        "
+	.byte $ff
+
+
+.function CharLineToVSPLine(charLine) {
+	// We need 3 lines for stabilize raster and setup VSP timing correctly
+	.return 51 + charLine * 8 - 3;
+}

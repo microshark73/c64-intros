@@ -9,10 +9,9 @@
 	],
 	"settings": {
 		"kickassembler.startup": "main.asm",
-		"kickassembler.assemblerLibraryPaths": ["..\\lib"],
+		"kickassembler.assemblerLibraryPaths": [".."],
 		"kickassembler.assembler.option.outputDirectory": "out",
-		"kickassembler.editor.showDiagnostics": false,
 		"kickassembler.editor.switchProblemsTabOnError": true,
-		"kickassembler.emulator.options": "-autostartprgmode 2 -autostart out\\main.prg -moncommands out\\main.vs"
+		"kickassembler.emulator.options": "-autostartprgmode 2 -autostart ${kickassembler:buildFilename} -moncommands ${kickassembler:viceSymbolsFilename}"
 	}
 }
