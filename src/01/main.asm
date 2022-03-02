@@ -141,6 +141,8 @@ lowerLogoVSP:
 	jsr calculateLogoPositions
 	jsr scroller.update
 
+	jsr blinkScroll
+
 	:AckAndSetNextIRQ(VSP1_LINE, irq1)
 	:popa
 	rti
@@ -211,12 +213,11 @@ screen: {
 }
 	.align $0800
 scrollFont:
-	//.import binary "assets\gp intro 07 2x3 - Chars.bin"
-	.import binary "assets\gp intro 07 2x3 extended - Chars.bin"
+	.import binary "assets/gp intro 07 2x3 extended - Chars.bin"
 
 scrollFontMap: {
-	.var map = LoadBinary("assets\gp intro 07 2x3 extended - Map.bin")
-	// 32 chars in a rows 2x3 format (1 row is 64 bytes)
+	.var map = LoadBinary("assets/gp intro 07 2x3 extended - Map.bin")
+	// 32 chars in one row, 2x3 format (1 row is 32*2 = 64 bytes)
 	row1: 
 	.fill 64, map.get(i)
 	.fill 64, map.get(3 * 64 + i)
@@ -226,12 +227,11 @@ scrollFontMap: {
 	row3:
 	.fill 64, map.get(128 + i)
 	.fill 64, map.get(128 + 3 * 64 + i)
-	//.import binary "assets\gp intro 07 2x3 extended - Map.bin"
 }
 
 	.align $40
 logoSpriteData:
-	.import binary "assets\logo - Sprites.isp"
+	.import binary "assets/logo - Sprites.isp"
 
 	.align $40
 scrollSpriteData:
@@ -246,8 +246,35 @@ sineTabAbs:
 	.fill sineData.size(), 12 * 8 - 1 - sineData.get(i)
 
 blinkTable:
-	//.byte $09, $02, $08, $0a, $0f, $0d, $07, $01
-	.byte $01, $0d, $0f, $0a, $08, $02, $09, $00, $09, $02, $08, $0a, $0f, $0d, $01
+	.var blinkTableStart = *
+	.fill 30, $01
+	.byte $01, $0d, $0f, $0a, $08, $02, $09, $00, $00, $00, $00, $00, $00, $09, $02, $08, $0a, $0f, $0d, $01
+	.var blinkTableSize = * - blinkTableStart
+
+blinkScroll: {
+	ldx blinkPos: #$00
+	bpl !+
+	rts
+!:
+	lda blinkTable, x
+	sta scrollSprites.color
+	dec blinkPos
+	ldy #39
+!:
+	.for(var i = 0; i < 3; i++) {
+		sta $d800 + (SCROLLER_TOP_LINE + i) * 40, y
+	}
+	dey
+	bpl !-
+
+	cpx #$00
+	bne !+
+	// When blink animation finished, we should re-enable scrolling...
+	lda #$01
+	sta scroller.speed
+!:
+	rts
+}
 
 .segment Default "Methods"
 
@@ -334,7 +361,7 @@ scroller: {
 update:
 	lda scrollerOffset: #$07
 	sec
-	sbc scrollSpeed: #$01
+	sbc speed: #$01
 	bcc !+
 	sta scrollerOffset
 
@@ -383,7 +410,13 @@ getNextChar:
 	rts
 setSpeed:
 	and #$07
-	sta scrollSpeed
+	sta speed
+	cmp #$00
+	bne !+
+	// Speed 0 means we should blink the scroller
+	lda #blinkTableSize - 1
+	sta blinkScroll.blinkPos
+!:
 	:inc16 scrollPos
 	jmp getNextChar
 reset:
@@ -444,7 +477,7 @@ initScreen:
 	lda #%1111_0000
 	sta VIC.SPRITE_ENABLE
 
-	lda #$0f
+	lda #$01
 	sta upperSprites.color
 	sta lowerSprites.color
 	sta scrollSprites.color
@@ -488,10 +521,21 @@ shiftRightSprites:
 scrollText:
 	//.encoding "screencode_upper"
 	.byte $85
-	.text "hello hallo elektor kalandorok             "
-	.byte $81
+	.text "damage[hun] presents   "
+	.byte $80
+	.text "a brand new c64 intro experiment     "
+	.byte $85
+	.text "created by microshark  "
+	.byte $80
+	.byte $20, $81, $20, $82, $20, $83, $20
+	.text "   music by a-man      "
+	.byte $80
+	.byte $20, $81, $20, $82, $20, $83, $20
+	.text "                          microshark73@gmail.com"
+	.byte $80
+	//.byte $81
 	.text @"@abcdefghijklmnopqrstuvwxyz["; .byte 28, 29, 30, 31; .text @"!\"#$%&'()*+,-./0123456789:;<=>?"
-	.byte $83
+	.byte $85
 	.text "                        "
 	.byte $ff
 
