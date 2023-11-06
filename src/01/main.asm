@@ -1,3 +1,7 @@
+// Music by A-Man/Tropic
+// Original font by Spacie/G*P
+// Code, idea, logo and font "improvement" by Microshark/Damage
+
 //#define DEBUG
 
 #import "lib/constants.asm"
@@ -27,10 +31,10 @@
 .segment Default "Main"
 
 main: 
-	bit $d012
-	bne main
-	bit $d011
-	bmi main
+!:	bit $d011
+	bpl !-
+!:	bit $d011
+	bmi !-
 
 	jsr initScreen
 	jsr calculateLogoPositions
@@ -48,8 +52,8 @@ main:
 	lda CIA1.CONTROL_STATUS // Clear CIA1
 	lda CIA2.CONTROL_STATUS // Clear CIA2
 	lda #$01
+	sta CIA1.CONTROL_STATUS
 	sta VIC.INTERRUPT_CONTROL // Enable raster interrupts
-	sta VIC.INTERRUPT_STATUS
 	:AckAndSetNextIRQ(VSP1_LINE, irq1)
 	cli
 	jmp *
@@ -531,10 +535,10 @@ scrollText:
 	.text "   music by a-man      "
 	.byte $80
 	.byte $20, $81, $20, $82, $20, $83, $20
-	.text "                          microshark73@gmail.com"
+	.text "                          microshark73@gmail.com  "
 	.byte $80
 	//.byte $81
-	.text @"@abcdefghijklmnopqrstuvwxyz["; .byte 28, 29, 30, 31; .text @"!\"#$%&'()*+,-./0123456789:;<=>?"
+	.text @"             @abcdefghijklmnopqrstuvwxyz["; .byte 28, 29, 30, 31; .text @"!\"#$%&'()*+,-./0123456789:;<=>?"
 	.byte $85
 	.text "                        "
 	.byte $ff
