@@ -31,10 +31,10 @@
 .segment Default "Main"
 
 main: 
-!:	bit $d011
-	bpl !-
-!:	bit $d011
-	bmi !-
+	lda $d012
+	bne main
+	lda $d011
+	bmi main
 
 	jsr initScreen
 	jsr calculateLogoPositions
